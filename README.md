@@ -27,7 +27,7 @@ Releases 에서 appimage 으로 실행하거나
 
 
 
-**빌드**
+# 빌드
 프로젝트 디렉토리에서 
 ```bash
 bash packaging/build.sh
