@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OpenOrbital
+Comment=Desktop manager for your own orbi.kr posts and comments
+Exec=openorbital
+Icon=openorbital
+Categories=Utility;
+Terminal=false

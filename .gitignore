@@ -1,0 +1,69 @@
+# --- 테스트 / 정찰용 스크립트 -------------------------------------------------
+# 실제 로그인 세션으로 긁어온 HTML 이 섞여 있어 공개 저장소에 올리지 않는다.
+tests/
+scripts/
+*_test.py
+test_*.py
+conftest.py
+
+# --- 파이썬 빌드 산출물 -------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# --- 패키징 산출물 (AppImage/DEB/RPM) ------------------------------------------
+dist_pkgs/
+packaging/AppDir/
+packaging/deb/
+packaging/tools/
+*.AppImage
+*.deb
+*.rpm
+
+# --- 가상환경 -----------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- 테스트 / 린터 캐시 -------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- 실행 중 만들어지는 개인 데이터 ------------------------------------------
+# 백업/내보내기 결과물에는 본인 글 본문과 프로필 ID 가 그대로 들어간다.
+orbi-backups/
+backups/
+exports/
+*.har
+recon_out/
+cookies.json
+session.json
+.env
+.env.*
+*.log
+
+# --- 에이전트 / 로컬 툴링 -----------------------------------------------------
+.claude/
+.agents/
+agent/
+skills-lock.json
+
+# --- 에디터 / OS --------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

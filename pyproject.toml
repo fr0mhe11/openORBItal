@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openorbital"
+version = "0.1.0"
+description = "Desktop manager for your own orbi.kr posts and comments"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.9",
+    "httpx>=0.27",
+    "selectolax>=0.3.21",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+orbi-manager = "orbi_manager.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
