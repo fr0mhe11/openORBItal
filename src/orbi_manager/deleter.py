@@ -9,6 +9,12 @@ this is an HTTP POST, not DELETE (a real DELETE gets a 405). It returns
 JSON, and the session cookie is the only credential — there is no CSRF
 token to carry, so replaying that request directly is all deletion takes.
 
+That last part cuts both ways: because the cookie is the only credential,
+losing it mid-batch is invisible at the status-code level. The site answers a
+logged-out delete with a redirect to the login page, and a client that
+follows redirects lands on a perfectly ordinary 200 having deleted nothing.
+:func:`_delete_http` therefore refuses to follow them.
+
 Two rules hold everywhere in this module:
 
 * ``dry_run=True`` does every step except issuing the request, and reports the
@@ -66,10 +72,24 @@ def _delete_http(
         )
 
     try:
-        response = client.request(method, url, headers=XHR_HEADERS)
+        # The session client follows redirects; this request must not. See the
+        # module docstring: a followed redirect turns a lost session into a 200.
+        response = client.request(
+            method, url, headers=XHR_HEADERS, follow_redirects=False
+        )
     except httpx.HTTPError as err:
         return ActionResult(item_id, Status.FAILED, f"요청 오류: {err}")
 
+    if 300 <= response.status_code < 400:
+        # Checked by range rather than `response.is_redirect`, which also wants
+        # a Location header — a 3xx without one still did not delete anything.
+        #
+        # FAILED, not SKIPPED: the session is gone for every remaining row too,
+        # so this must count toward MAX_CONSECUTIVE_FAILURES and end the batch
+        # rather than ask the login page 300 times.
+        return ActionResult(
+            item_id, Status.FAILED, "세션이 만료되었습니다. 다시 로그인하세요."
+        )
     if response.status_code == 429:
         return ActionResult(item_id, Status.RATE_LIMITED, "429 Too Many Requests")
     if response.status_code in ROW_REFUSED_CODES:
