@@ -40,6 +40,8 @@ mkdir -p packaging/AppDir/usr/bin
 cp -a "dist/${PKG}/." packaging/AppDir/usr/bin/
 cp "packaging/${PKG}.desktop" "packaging/AppDir/${PKG}.desktop"
 cp "packaging/icons/${PKG}-256.png" "packaging/AppDir/${PKG}.png"
+# GPL-3 §4: the licence text travels with the binary, in every artifact.
+install -Dm0644 LICENSE "packaging/AppDir/usr/share/licenses/${PKG}/LICENSE"
 cat > packaging/AppDir/AppRun << EOF
 #!/bin/bash
 HERE="\$(dirname "\$(readlink -f "\${0}")")"
@@ -67,6 +69,11 @@ cp "packaging/icons/${PKG}-128.png" "$DEBROOT/usr/share/icons/hicolor/128x128/ap
 cp "packaging/icons/${PKG}-256.png" "$DEBROOT/usr/share/icons/hicolor/256x256/apps/${PKG}.png"
 cp "packaging/icons/${PKG}-512.png" "$DEBROOT/usr/share/icons/hicolor/512x512/apps/${PKG}.png"
 
+# Both conventions, because this tree is the payload for the .deb *and* the
+# .rpm: Debian looks in doc/<pkg>/copyright, rpm in share/licenses/<pkg>/.
+install -Dm0644 LICENSE "$DEBROOT/usr/share/doc/${PKG}/copyright"
+install -Dm0644 LICENSE "$DEBROOT/usr/share/licenses/${PKG}/LICENSE"
+
 INSTALLED_SIZE=$(du -sk "$DEBROOT/usr" | cut -f1)
 cat > "$DEBROOT/DEBIAN/control" << EOF
 Package: ${PKG}
@@ -78,8 +85,9 @@ Installed-Size: ${INSTALLED_SIZE}
 Maintainer: OpenOrbital <noreply@example.com>
 Description: Desktop manager for your own orbi.kr posts and comments
  View, back up, or delete your own orbi.kr posts through a checkbox-driven
- desktop GUI. Dry-run is on by default and deletions require typed
- confirmation.
+ desktop GUI. Deletions are irreversible and require the exact number of
+ selected rows to be typed before they run; an optional dry-run reports
+ what would be sent without sending it.
 EOF
 chmod 0644 "$DEBROOT/DEBIAN/control"
 
