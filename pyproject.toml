@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openorbital"
-version = "0.1.0"
+version = "0.2.0"
 description = "Desktop manager for your own orbi.kr posts and comments"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+build = ["pyinstaller>=6.22"]
 
 [project.scripts]
 orbi-manager = "orbi_manager.__main__:main"
