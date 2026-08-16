@@ -15,7 +15,9 @@ SITE = "https://orbi.kr"
 
 #: Seconds to back off after the site answers 429 (rate limited).
 DELETE_COOLDOWN_SEC = 60
-#: Hard floor for the cooldown, even if the user lowers it in the UI.
+#: Clamp for programmatic callers — ``Cooldown(0)`` waits 5 seconds, not none.
+#: Doubles as the UI spinbox minimum, so the UI cannot produce a value below
+#: this and the clamp never fires on that path. Not a guard against the UI.
 MIN_COOLDOWN_SEC = 5
 #: How many times a row answering 429 is retried, each attempt preceded by the
 #: cooldown. Exhausting them ends the batch: a rate limit applies to the whole
