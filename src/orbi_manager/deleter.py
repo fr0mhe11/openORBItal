@@ -25,13 +25,15 @@ Two rules hold everywhere in this module:
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
 from . import config, selectors
 from .models import ActionResult, BatchSummary, Status
+from .pacing import Pacer
 from .ratelimit import Cooldown
 
 TickCallback = Callable[[int], None]
@@ -57,6 +59,36 @@ def _error_message(response: httpx.Response) -> str:
     return f"HTTP {response.status_code}: {message}" if message else (
         f"HTTP {response.status_code}"
     )
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """How long the site asked us to wait, or None if it did not say.
+
+    ``Retry-After`` comes in two shapes (RFC 9110): a plain number of
+    seconds, or an HTTP-date. Both are accepted; anything unparseable is
+    treated as no header at all rather than as a reason to fail. The result
+    is clamped, so neither a `0` nor an hour-long value can be taken
+    literally.
+    """
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+
+    raw = raw.strip()
+    try:
+        seconds = float(raw)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(raw)
+        except (TypeError, ValueError):
+            return None
+        if when is None:
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        seconds = (when - datetime.now(timezone.utc)).total_seconds()
+
+    return min(max(seconds, config.MIN_COOLDOWN_SEC), config.MAX_COOLDOWN_SEC)
 
 
 def _delete_http(
@@ -91,7 +123,12 @@ def _delete_http(
             item_id, Status.FAILED, "세션이 만료되었습니다. 다시 로그인하세요."
         )
     if response.status_code == 429:
-        return ActionResult(item_id, Status.RATE_LIMITED, "429 Too Many Requests")
+        return ActionResult(
+            item_id,
+            Status.RATE_LIMITED,
+            "429 Too Many Requests",
+            retry_after=_retry_after_seconds(response),
+        )
     if response.status_code in ROW_REFUSED_CODES:
         # The site refuses this row specifically; the next row may still work.
         return ActionResult(item_id, Status.SKIPPED, _error_message(response))
@@ -126,8 +163,12 @@ def _delete_with_retries(
 ) -> tuple[ActionResult, bool]:
     """Delete one row, waiting out the cooldown and trying again after a 429.
 
-    The cooldown only earns its 60 seconds if the request it was waiting for is
+    The cooldown only earns its seconds if the request it was waiting for is
     actually re-sent, so a rate-limited row is retried rather than dropped.
+
+    How long it waits is the site's own ``Retry-After`` when the 429 carried
+    one, and the configured cooldown otherwise — waiting a fixed minute after
+    being told "five seconds" is not politeness, just delay.
 
     Returns the last result and whether the wait was cancelled. Only the final
     result is reported to the caller, so retries never inflate the totals or
@@ -137,7 +178,7 @@ def _delete_with_retries(
     for _ in range(retries):
         if result.status is not Status.RATE_LIMITED:
             break
-        if not pause.wait(on_cooldown_tick):
+        if not pause.wait(on_cooldown_tick, seconds=result.retry_after):
             return result, True
         result = delete_one(row)
     return result, False
@@ -149,6 +190,7 @@ def run_batch(
     *,
     dry_run: bool = True,
     cooldown: Cooldown | None = None,
+    pacer: Pacer | None = None,
     on_result: ResultCallback | None = None,
     on_cooldown_tick: TickCallback | None = None,
 ) -> BatchSummary:
@@ -166,28 +208,40 @@ def run_batch(
     working through the remaining rows would only ask the same question a few
     hundred more times.
 
-    Rows that are not rate limited get a short pause instead; there is no
-    evidence the site enforces a fixed delay between ordinary deletes, so
-    waiting the full cooldown after each one only slows the batch down.
+    Rows that are not rate limited get a short pause instead, handled by
+    ``pacer``. There is no evidence the site enforces a fixed delay between
+    ordinary deletes, so rather than guess one and stick to it, the pacer
+    starts conservative and lets the site's own answers move it — closing up
+    while nothing complains, backing off hard the moment something does.
     """
     if len(rows) > config.MAX_BATCH:
         raise ValueError(f"한 번에 {config.MAX_BATCH}개까지만 처리합니다")
 
     summary = BatchSummary()
     pause = cooldown or Cooldown()
+    pace = pacer or Pacer()
     consecutive_failures = 0
     # A dry run issues no request, so it has nothing to be rate limited by and
     # nothing to wait for.
     retries = 0 if dry_run else config.RATE_LIMIT_RETRIES
 
-    for index, row in enumerate(rows):
+    for row in rows:
         if pause.cancelled:
+            summary.aborted = True
+            break
+
+        # Paced *before* the request, not after: that is what makes the
+        # interval run request-start to request-start, and it means a batch
+        # that ends early never sat through a trailing pause.
+        if not dry_run and not pace.wait():
             summary.aborted = True
             break
 
         result, cancelled = _delete_with_retries(
             row, delete_one, retries, pause, on_cooldown_tick
         )
+        if not dry_run:
+            pace.on_result(result)
         summary.add(result)
         if on_result is not None:
             on_result(result)
@@ -208,10 +262,5 @@ def run_batch(
                 break
         else:
             consecutive_failures = 0
-
-        if index == len(rows) - 1:
-            break
-        if not dry_run:
-            time.sleep(config.SKIPPED_ROW_DELAY_SEC)
 
     return summary

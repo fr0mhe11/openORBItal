@@ -34,9 +34,18 @@ class Cooldown:
     def cancelled(self) -> bool:
         return self._cancelled.is_set()
 
-    def wait(self, on_tick: TickCallback | None = None) -> bool:
-        """Wait out the cooldown. Returns False if it was cancelled early."""
-        for remaining in range(self.seconds, 0, -1):
+    def wait(
+        self, on_tick: TickCallback | None = None, seconds: float | None = None
+    ) -> bool:
+        """Wait out the cooldown. Returns False if it was cancelled early.
+
+        ``seconds`` overrides *this one wait* and leaves :attr:`seconds`
+        alone — it carries the site's own ``Retry-After``, which is a better
+        answer than the configured default for that one 429 and says nothing
+        about the next.
+        """
+        total = self.seconds if seconds is None else max(1, int(round(seconds)))
+        for remaining in range(total, 0, -1):
             if self._cancelled.is_set():
                 return False
             if on_tick is not None:

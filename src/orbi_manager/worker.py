@@ -17,9 +17,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from . import deleter, exporter
+from . import config, deleter, exporter
 from .auth import AuthSession, LoginError
 from .modes import ModeSpec
+from .pacing import Pacer
 from .ratelimit import Cooldown
 
 
@@ -88,13 +89,14 @@ class SessionThread(QThread):
 
         self._jobs.put(_Job(job, "로그인"))
 
-    def submit_fetch(self, mode: ModeSpec) -> None:
+    def submit_fetch(self, mode: ModeSpec, safe_mode: bool = False) -> None:
         def job() -> None:
             rows = mode.fetch(
                 self._require_client(),
                 self.fetch_progress.emit,
                 limit=mode.fetch_limit,
                 should_stop=self._stop.is_set,
+                safe_mode=safe_mode,
             )
             self.rows_ready.emit(list(rows))
 
@@ -113,6 +115,7 @@ class SessionThread(QThread):
         mode: ModeSpec,
         dry_run: bool,
         cooldown_sec: int,
+        safe_mode: bool = False,
     ) -> None:
         if mode.delete_one is None:
             raise ValueError(f"{mode.key}는 삭제 모드가 아닙니다")
@@ -121,6 +124,13 @@ class SessionThread(QThread):
             client = self._require_client()
 
             self._cooldown = Cooldown(cooldown_sec)
+            # The pacer shares the thread's stop event, so a stop asked for
+            # during a pause between rows lands there rather than after it.
+            pacer = (
+                Pacer.fixed(config.SAFE_MODE_DELAY_SEC, cancel=self._stop)
+                if safe_mode
+                else Pacer(cancel=self._stop)
+            )
             # Closes the gap between the job being queued and the cooldown
             # existing: a stop asked for in that window must still land.
             if self._stop.is_set():
@@ -139,6 +149,7 @@ class SessionThread(QThread):
                 lambda row: mode.delete_one(row, client, dry_run),
                 dry_run=dry_run,
                 cooldown=self._cooldown,
+                pacer=pacer,
                 on_result=on_result,
                 on_cooldown_tick=self.cooldown_tick.emit,
             )
@@ -149,9 +160,10 @@ class SessionThread(QThread):
     def request_stop(self) -> None:
         """Ask the running job to stop at its next safe point.
 
-        A fetch stops between list pages; a delete batch stops between rows,
-        and an in-flight cooldown is interrupted so a 429 wait does not hold
-        the stop for another minute. Nothing is ever cut off mid-request.
+        A fetch stops between list pages; a delete batch stops between rows.
+        Both kinds of pause are interrupted rather than waited out — the 429
+        cooldown, so a stop does not hang for another minute, and the
+        ordinary pace between rows. Nothing is ever cut off mid-request.
         """
         self._stop.set()
         if self._cooldown is not None:

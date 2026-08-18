@@ -132,10 +132,26 @@ class MainWindow(QMainWindow):
         self.dry_run_box.setToolTip("체크 상태에서는 실제 삭제 요청을 보내지 않습니다.")
         action_row.addWidget(self.dry_run_box)
 
+        self.safe_mode_box = QCheckBox("안전 모드")
+        self.safe_mode_box.setChecked(False)
+        self.safe_mode_box.setToolTip(
+            "불러오기·삭제 모두 이 앱이 원래 쓰던 고정 속도로 되돌립니다\n"
+            f"(삭제 {config.SAFE_MODE_DELAY_SEC}초, 불러오기 "
+            f"{config.LIST_SAFE_MODE_DELAY_SEC}초 간격, limit 파라미터 미사용).\n"
+            f"기본값(해제)은 사이트가 429를 보내면 자동으로 느려지는 "
+            "적응형 속도입니다."
+        )
+        action_row.addWidget(self.safe_mode_box)
+
         action_row.addWidget(QLabel("429 대기(초):"))
         self.cooldown_spin = QSpinBox()
         self.cooldown_spin.setRange(config.MIN_COOLDOWN_SEC, 600)
         self.cooldown_spin.setValue(config.DELETE_COOLDOWN_SEC)
+        self.cooldown_spin.setToolTip(
+            "429를 받았을 때 기다릴 시간입니다.\n"
+            "사이트가 Retry-After 헤더로 직접 시간을 알려주면 그 값을 "
+            "따르고, 이 값은 헤더가 없을 때만 쓰입니다."
+        )
         action_row.addWidget(self.cooldown_spin)
 
         self.stop_button = QPushButton("중단")
@@ -316,7 +332,7 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         self.progress.setRange(0, 0)
         self.log_panel.log(f"{self._mode.label}: 목록 불러오는 중...")
-        self.session.submit_fetch(self._mode)
+        self.session.submit_fetch(self._mode, self.safe_mode_box.isChecked())
 
     def _on_fetch_progress(self, rows: int, pages: int) -> None:
         self.status_label.setText(f"{pages}페이지 / {rows}건")
@@ -387,6 +403,7 @@ class MainWindow(QMainWindow):
             self._mode,
             dry_run,
             self.cooldown_spin.value(),
+            self.safe_mode_box.isChecked(),
         )
 
     def _on_row_done(self, row_id: str, status: str, message: str) -> None:

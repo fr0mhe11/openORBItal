@@ -38,25 +38,24 @@ SUBMIT_CANDIDATES = (
 OWN_USER_ID_RE = re.compile(r"user_id:\s*[\"'](\d+)[\"']")
 #: Fallback: the sidebar member box links to the viewer's own profile.
 OWN_USER_ID_NODE = "div.member-box a.nickname"
+OWN_USER_ID_NODE_ATTR = "imin"
 
 # --- My content lists -------------------------------------------------------
 
-#: The site has no dedicated "my posts" page; the search endpoint filtered by
-#: member id is what the site itself links to. `imin` is orbi's word for a
-#: member id.
-SEARCH_URL = "https://orbi.kr/search?type={kind}&q={uid}&page={page}"
-KIND_MY_POSTS = "imin"
-
-#: One row of a search result list. Pinned notices carry class "notice" and
-#: belong to the site, not the user.
-LIST_ROW = "ul.post-list > li"
-NOTICE_CLASS = "notice"
-
-ROW_TITLE_BLOCK = "p.title"
-ROW_DATE = "p.date abbr"
-ROW_DATE_TITLE_ATTR = "title"  # "@2026-08-11 22:48:21"
-ROW_AUTHOR = "a.nickname"
-ROW_AUTHOR_ID_ATTR = "imin"
+#: The site's own search (`?type=imin&q=<uid>`) silently drops posts an admin
+#: has "모어보기 밴"'d — they're excluded from the search index, but still
+#: show on the member's own profile. The profile's "활동" tab loads its list
+#: from this JSON endpoint (confirmed via `scripts/recon_profile_api.py`),
+#: which is unaffected by that ban, so it — not search — is the source of
+#: truth for "every post this member wrote". Cursor-paginated: each response
+#: carries the offset to pass for the next page.
+TIMELINE_URL = "https://orbi.kr/api/v1/user/{uid}/timeline?offset={offset}"
+#: The site's own JS sends no page-size parameter and the server's default is
+#: 10 posts per response (see `scripts/recon_out/06_profile_api_calls.json`),
+#: so `limit` is a guess — one worth making, because a bigger page means
+#: *fewer* requests for the same list, not faster ones. `scraper` sends it
+#: once and drops it for the rest of the walk if the server refuses it.
+TIMELINE_URL_SIZED = TIMELINE_URL + "&limit={limit}"
 
 # --- Ids --------------------------------------------------------------------
 

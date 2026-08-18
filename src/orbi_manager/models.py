@@ -41,6 +41,11 @@ class ActionResult:
     id: str
     status: Status
     message: str = ""
+    #: Seconds the site itself asked us to wait, read off its ``Retry-After``
+    #: header. Only ever set alongside :attr:`Status.RATE_LIMITED`, and None
+    #: when the site sent no header — the caller then falls back to its own
+    #: configured cooldown.
+    retry_after: float | None = None
 
     @property
     def ok(self) -> bool:
