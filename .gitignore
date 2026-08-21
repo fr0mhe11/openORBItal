@@ -58,6 +58,7 @@ session.json
 .agents/
 agent/
 skills-lock.json
+CLAUDE.md
 
 # --- 에디터 / OS --------------------------------------------------------------
 .vscode/

@@ -27,10 +27,19 @@ rm -rf build dist
 ./.venv/bin/pyinstaller --noconfirm packaging/pyinstaller.spec --distpath dist --workpath build
 
 # --- 2. 아이콘 준비 -------------------------------------------------------------
+# ImageMagick 7 은 `convert` 를 deprecated 로 경고한다. 7 이면 `magick`,
+# 6 만 있는 배포판이면 `convert` 로 떨어진다.
+MAGICK=$(command -v magick || command -v convert)
+
 echo "==> 아이콘 리사이즈"
 mkdir -p packaging/icons
 for size in 128 256 512; do
-  convert logo.png -resize "${size}x${size}" "packaging/icons/${PKG}-${size}.png"
+  # exclude-chunk=date,time: 안 빼면 PNG 에 생성 시각(tIME)이 박혀서, 같은
+  # logo.png 로 만든 같은 그림인데도 빌드할 때마다 바이트가 달라진다 —
+  # 추적 중인 파일이라 그대로 두면 매 빌드가 의미 없는 diff 를 남긴다.
+  "$MAGICK" logo.png -resize "${size}x${size}" \
+    -define png:exclude-chunk=date,time \
+    "packaging/icons/${PKG}-${size}.png"
 done
 
 # --- 3. AppImage ---------------------------------------------------------------
